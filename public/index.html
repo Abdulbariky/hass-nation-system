@@ -1,0 +1,146 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HASS NATION — Live Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <h1>HASS NATION</h1>
+      <span class="tag">Live console — connected to the real backend</span>
+    </div>
+    <nav class="tabs">
+      <button data-screen="lookup" class="active">Find account</button>
+      <button data-screen="new-account">New account</button>
+      <button data-screen="fuel">Fuel & earn</button>
+      <button data-screen="redeem">Redeem</button>
+      <button data-screen="analytics">Analytics</button>
+    </nav>
+  </header>
+
+  <!-- FIND ACCOUNT -->
+  <section class="screen active" id="screen-lookup">
+    <h2 class="screen-title">Find an account</h2>
+    <p class="screen-sub">Look up a card by its code to see balance, tier (for fleets), and history.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="lookup-code">Card code</label>
+        <input type="text" id="lookup-code" placeholder="e.g. CAP-0001">
+      </div>
+      <button class="btn" id="btn-lookup">Look up</button>
+    </div>
+    <div id="account-result"></div>
+  </section>
+
+  <!-- NEW ACCOUNT -->
+  <section class="screen" id="screen-new-account">
+    <h2 class="screen-title">Open a new account</h2>
+    <p class="screen-sub">Individual or fleet is decided here, once, at onboarding — it never changes automatically later.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="na-code">Card code</label>
+        <input type="text" id="na-code" placeholder="e.g. CAP-0002">
+      </div>
+      <div class="field">
+        <label for="na-type">Account type</label>
+        <select id="na-type">
+          <option value="individual">Individual</option>
+          <option value="fleet">Fleet / sacco</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="na-name">Name</label>
+        <input type="text" id="na-name" placeholder="e.g. John K. or 'Kilimani Boda Sacco'">
+      </div>
+      <div class="field">
+        <label for="na-phone">Phone (for SMS confirmations)</label>
+        <input type="text" id="na-phone" placeholder="e.g. 0712345678">
+      </div>
+      <div class="field">
+        <label for="na-rank">Rank (identity only — doesn't affect earn rate)</label>
+        <select id="na-rank">
+          <option value="captain">Captain</option>
+          <option value="warrior">Warrior</option>
+          <option value="commander">Commander</option>
+        </select>
+      </div>
+      <button class="btn" id="btn-new-account">Create account</button>
+      <div class="result-msg" id="new-account-result"></div>
+    </div>
+  </section>
+
+  <!-- FUEL & EARN -->
+  <section class="screen" id="screen-fuel">
+    <h2 class="screen-title">Fuel & earn</h2>
+    <p class="screen-sub">Record a real fill-up. Points are calculated automatically — individual flat rate, or fleet tiered rate based on trailing 12-month volume.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="fuel-code">Card code</label>
+        <input type="text" id="fuel-code" placeholder="e.g. CAP-0001">
+      </div>
+      <div class="field">
+        <label for="fuel-litres">Litres pumped</label>
+        <input type="number" id="fuel-litres" placeholder="e.g. 20" step="0.1">
+      </div>
+      <div class="field">
+        <label for="fuel-type">Fuel type</label>
+        <select id="fuel-type">
+          <option value="petrol">Petrol</option>
+          <option value="diesel">Diesel</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fuel-station">Station</label>
+        <input type="text" id="fuel-station" placeholder="e.g. Kilimani station">
+      </div>
+      <div class="field">
+        <label for="fuel-amount">Amount paid (KSh)</label>
+        <input type="number" id="fuel-amount" placeholder="e.g. 4240">
+      </div>
+      <button class="btn" id="btn-fuel">Record fuel purchase</button>
+      <div class="result-msg" id="fuel-result"></div>
+    </div>
+  </section>
+
+  <!-- REDEEM -->
+  <section class="screen" id="screen-redeem">
+    <h2 class="screen-title">Redeem</h2>
+    <p class="screen-sub">500-point minimum, capped at 30% of the invoice, checked automatically.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="redeem-code">Card code</label>
+        <input type="text" id="redeem-code" placeholder="e.g. CAP-0001">
+      </div>
+      <div class="field">
+        <label for="redeem-invoice">Today's invoice (KSh)</label>
+        <input type="number" id="redeem-invoice" placeholder="e.g. 8000">
+      </div>
+      <div class="field">
+        <label for="redeem-points">Points to redeem</label>
+        <input type="number" id="redeem-points" placeholder="e.g. 1500">
+      </div>
+      <button class="btn" id="btn-redeem">Redeem at the pump</button>
+      <div class="result-msg" id="redeem-result"></div>
+    </div>
+  </section>
+
+  <!-- ANALYTICS -->
+  <section class="screen" id="screen-analytics">
+    <h2 class="screen-title">Analytics</h2>
+    <p class="screen-sub">A first look at what's happening across the whole system.</p>
+    <div id="analytics-body"></div>
+  </section>
+
+  <footer class="demo-foot">HASS NATION system — running locally against a real SQLite database.</footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>
