@@ -23,18 +23,24 @@ npm install          # downloads the packages this project depends on
 cp .env.example .env  # your local configuration file (Mac/Linux)
 # on Windows, instead: copy .env.example .env
 npm run seed          # creates 4 starter accounts so you have something to look up
+npm run create-admin  # creates your own staff login — you'll be asked for name/phone/password
 npm start              # starts the server
 ```
 
-Then open **http://localhost:3000** in your browser. That's the whole
-system — staff console, redemption, analytics — all in one page with tabs.
+Then open **http://localhost:3000** in your browser — you'll land on the
+"Karibu HASS Nation" welcome page, then a staff login screen. Log in with
+the admin account you just created; only after that do you reach the
+console (staff console, redemption, analytics — all in one page with
+tabs). There's no shared password anymore — every staff member needs
+their own login, and every action they take is now tied to their name
+(see section 8).
 
 To stop the server, go back to the terminal and press `Ctrl+C`.
 
 ## 3. Try it immediately
 
 The seed script created these test cards — use them in the "Find account"
-or "Fuel & earn" tabs:
+or "Fuel & earn" tabs (once you're logged in):
 
 | Card code | Type | Name |
 |---|---|---|
@@ -54,11 +60,13 @@ live.
 npm test
 ```
 
-This runs 22 automated checks against the actual code — individual flat
+This runs 140+ automated checks against the actual code — individual flat
 rate, the 500-point minimum, the 30% cap, fleet tiers climbing correctly,
-the rolling 12-month window, and the big one: that redeeming points never
-lowers a fleet's tier. It runs against its own throwaway test database, so
-it's always safe to re-run and never touches your real seeded data.
+the rolling 12-month window, the big one (that redeeming points never
+lowers a fleet's tier), staff/fleet-manager auth, fleet-to-fleet data
+isolation, and the mocked M-Pesa top-up and USSD menu logic from sections
+10–11 below. It runs against its own throwaway test database, so it's
+always safe to re-run and never touches your real seeded data.
 
 ## 5. What's in this folder, and why
 
@@ -79,21 +87,33 @@ hass-nation-system/
 │   ├── smsService.js        — sends confirmation texts. Currently just
 │   │                          prints to the terminal — see section 7 below
 │   │                          to connect a real SMS provider.
-│   └── auth.js              — the staff API key check (see section 8 —
-│                                this needs hardening before real use)
+│   ├── auth.js              — staff login: bcrypt password checks and
+│   │                            session tokens (see section 8 — this is
+│   │                            what replaced the old shared API key)
+│   ├── mpesaService.js      — M-Pesa Daraja STK push top-up — BUILT, NOT
+│   │                            LIVE, see section 10
+│   └── ussdService.js       — USSD balance/history menu logic — BUILT,
+│                                NOT LIVE, see section 11
 ├── routes/
 │   ├── accounts.js          — create + look up accounts
 │   ├── fuel.js               — record a fuel purchase
 │   ├── redeem.js             — redeem points
-│   └── analytics.js         — the dashboard summary numbers
+│   ├── analytics.js         — the dashboard summary numbers
+│   ├── mpesa.js              — STK push + Safaricom callback endpoints
+│   └── ussd.js               — the endpoint a USSD gateway calls
 ├── public/                  — the actual portal you see in the browser
-│   ├── index.html
+│   ├── index.html            — "Karibu HASS Nation" welcome page (entry point)
+│   ├── login.html            — staff login screen
+│   ├── console.html          — the dark staff console (old index.html)
 │   ├── styles.css
 │   └── app.js               — calls the backend API; contains NO business
 │                                logic itself (that all lives in services/)
 └── scripts/
     ├── seed.js               — creates the 4 test accounts
-    └── test-scenarios.js     — the 22 automated checks
+    ├── createAdmin.js        — creates the first admin staff login
+    ├── simulateMpesaCallback.js — simulates Safaricom's callback locally
+    ├── simulateUssd.js       — simulates a phone dialling the USSD menu
+    └── test-scenarios.js     — the automated checks (npm test)
 ```
 
 **The rule to remember:** all the actual money-and-points decisions live
@@ -139,10 +159,13 @@ To send real texts:
 Three things this version deliberately simplifies, flagged so nothing
 gets forgotten:
 
-- **Auth is a single shared password** (`services/auth.js`), not per-staff
-  logins. Fine for you testing on your laptop today; replace with real
-  per-attendant accounts before pump staff are using this with actual
-  customers, so you know WHO ran every transaction.
+- **Auth is now per-staff logins** (`services/auth.js`, `staff_users` table)
+  — every fuel purchase and redemption records `staff_id`, so you always
+  know WHO ran a transaction. Run `npm run create-admin` to create the
+  first login. Sessions are a plain bearer token in a `staff_sessions`
+  table, good enough for one station on your laptop; if you run multiple
+  stations for real, consider shorter session expiry and HTTPS in front
+  of this (there's no rate-limiting on the login endpoint itself yet).
 - **SQLite is a single file, not built for many people writing at once
   from multiple stations.** Perfect for one laptop today. Before a real
   multi-station pilot, this needs to move to Postgres — the SQL in
@@ -153,12 +176,92 @@ gets forgotten:
   hardware depends entirely on what your POS vendor can offer — see the
   earlier conversation about that being the real gating factor.
 
-## 9. Deploying somewhere real (not just your laptop)
+## 10. M-Pesa top-up (Safaricom Daraja) — BUILT, NOT LIVE
+
+Lets a customer top up their points balance directly with cash via M-Pesa
+STK push (a prompt on their phone to enter their PIN), credited 1:1 as
+points — the "Top-up (M-Pesa)" tab in the console. The full flow is
+implemented: `POST /api/mpesa/stkpush` initiates the push,
+`POST /api/mpesa/callback/:secret` handles Safaricom's result, and a
+successful payment credits `points_ledger` (reason `topup`) exactly like
+a fuel purchase does (same 12-month expiry). All of that code path is
+exercised by `npm test` — but **it has never talked to the real M-Pesa
+network**, and it can't, until two things exist that only you can provide:
+
+1. **Approved Daraja PRODUCTION credentials** — consumer key, consumer
+   secret, shortcode, and passkey, from
+   [developer.safaricom.co.ke](https://developer.safaricom.co.ke) after
+   Safaricom approves a go-live application. Sandbox credentials only
+   simulate M-Pesa — they never reach a real phone or move real money,
+   but you'd still need them to even exercise the real Daraja HTTP calls.
+2. **A publicly reachable HTTPS callback URL** (`MPESA_CALLBACK_URL`) that
+   Safaricom's servers can reach from the open internet. This **cannot be
+   `localhost`** — use a tool like [ngrok](https://ngrok.com) to get a
+   temporary public URL while integration-testing against the Daraja
+   sandbox, and your real deployed domain once live.
+
+**Until both exist, leave `MPESA_MOCK=true`** (the default in
+`.env.example`) — every field you'd need is there as a clearly-marked
+`REPLACE_WITH_...` placeholder in `.env.example`, and setting them to real
+values plus `MPESA_MOCK=false` is the entire switch-over; nothing else in
+the code needs to change. In mock mode, initiating a top-up never contacts
+Safaricom — it records a pending request and hands you back a
+`checkoutRequestId`. Resolve it yourself with either:
+
+- the **"Simulate: customer paid" / "Simulate: customer cancelled"**
+  buttons that appear in the console right after you send a mock push, or
+- `npm run simulate-mpesa-callback -- <checkoutRequestId>` (add `--fail`
+  to simulate a cancelled payment) from a terminal.
+
+Both paths run through the exact same `handleCallback()` a real Safaricom
+webhook would hit — so the mock isn't a shortcut around the real logic,
+it's the real logic fed a fake input, which is also why it's safe to trust
+once real credentials are dropped in.
+
+The callback route also isn't wide open: it's protected by a secret path
+segment (`MPESA_CALLBACK_SECRET`) since Safaricom can't present a staff
+login — see the comments in `routes/mpesa.js` for the one additional
+safeguard worth adding in production (an IP allowlist for Safaricom's
+published callback ranges).
+
+## 11. USSD balance check — BUILT, NOT LIVE
+
+Lets a customer dial a short code from any phone (no smartphone, no app,
+no data connection needed) to check their points balance or recent
+activity. `POST /api/ussd` (`routes/ussd.js` → `services/ussdService.js`)
+implements the menu logic end-to-end, in the same `CON`/`END` plain-text
+request-response convention Africa's Talking's USSD product uses (and
+which Safaricom's own USSD gateway, or an aggregator fronting a
+Safaricom-leased shortcode, mirrors) — `npm test` exercises it fully.
+
+What it's missing is the one thing no amount of local testing can
+substitute for: **an actual USSD shortcode** (something like `*384*7#`)
+**leased from Safaricom**, pointed at this endpoint's public URL. That's a
+paid, approval-gated process that typically takes **several weeks**, not
+something this codebase can shortcut. Until you have one, no real phone
+can dial in to this menu at all.
+
+To exercise the exact same menu a real caller would see, with the server
+running (`npm start` in another terminal):
+
+```bash
+npm run simulate-ussd -- 0711000001
+```
+
+(use a phone number that matches one of your seeded/created accounts to
+see real balance/history data). It walks the same `CON`/`END` conversation
+a phone would, one key-press at a time, against your own running server —
+no shortcode, gateway, or telco involved.
+
+## 12. Deploying somewhere real (not just your laptop)
 
 When you're ready to put this on a real URL instead of localhost:
 
 - Any standard Node hosting works: Render, Railway, Fly.io, or a plain
   Linux server all run this exactly as-is.
 - Swap SQLite for Postgres first (see section 8).
-- Set real environment variables (`STAFF_API_KEY`, SMS credentials) on
-  whatever host you choose — never commit `.env` itself anywhere.
+- Set real environment variables on whatever host you choose — every
+  staff login is created via `npm run create-admin` (or by an admin from
+  the console) rather than an env var; M-Pesa and SMS credentials still
+  go in the environment (see sections 7 and 10). Never commit `.env`
+  itself anywhere.

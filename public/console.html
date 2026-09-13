@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HASS NATION — Live Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // No session, no console — bounce to the login page before this page
+  // paints. This is just a UX shortcut; the API itself is what actually
+  // enforces the login requirement on every request (services/auth.js).
+  if (!localStorage.getItem('hn_token')) {
+    location.href = 'login.html';
+  }
+</script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <h1>HASS NATION</h1>
+      <span class="tag">Live console — connected to the real backend</span>
+    </div>
+    <div class="staff-bar">
+      <span id="staff-name"></span>
+      <button class="btn-logout" id="btn-logout">Log out</button>
+    </div>
+    <nav class="tabs">
+      <button data-screen="lookup" class="active">Find account</button>
+      <button data-screen="new-account">New account</button>
+      <button data-screen="fuel">Fuel & earn</button>
+      <button data-screen="redeem">Redeem</button>
+      <button data-screen="topup">Top-up (M-Pesa)</button>
+      <button data-screen="analytics">Analytics</button>
+    </nav>
+  </header>
+
+  <!-- FIND ACCOUNT -->
+  <section class="screen active" id="screen-lookup">
+    <h2 class="screen-title">Find an account</h2>
+    <p class="screen-sub">Look up a card by its code, or by the phone number on file, to see balance, tier (for fleets), and history.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="lookup-code">Card code or phone number</label>
+        <input type="text" id="lookup-code" placeholder="e.g. CAP-0001 or 0712345678">
+      </div>
+      <button class="btn" id="btn-lookup">Look up</button>
+    </div>
+    <div id="account-result"></div>
+  </section>
+
+  <!-- NEW ACCOUNT -->
+  <section class="screen" id="screen-new-account">
+    <h2 class="screen-title">Open a new account</h2>
+    <p class="screen-sub">Individual or fleet is decided here, once, at onboarding — it never changes automatically later. The card code is generated automatically once the phone is verified.</p>
+
+    <div class="panel narrow" id="na-step-details">
+      <div class="field">
+        <label for="na-type">Account type</label>
+        <select id="na-type">
+          <option value="individual">Individual</option>
+          <option value="fleet">Fleet / sacco</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="na-name">Name</label>
+        <input type="text" id="na-name" placeholder="e.g. John K. or 'Kilimani Boda Sacco'">
+      </div>
+      <div class="field">
+        <label for="na-phone">Phone number</label>
+        <input type="text" id="na-phone" placeholder="e.g. 0712345678">
+      </div>
+      <div class="field">
+        <label for="na-vehicle-type">Vehicle type (decides rank automatically — doesn't affect earn rate)</label>
+        <select id="na-vehicle-type">
+          <option value="boda_boda">Boda boda</option>
+          <option value="matatu">Matatu</option>
+          <option value="school_bus">School bus</option>
+          <option value="personal_car">Personal car</option>
+          <option value="corporate_car">Corporate car</option>
+          <option value="uber_taxi">Uber / taxi</option>
+          <option value="truck">Truck</option>
+          <option value="trailer">Trailer</option>
+          <option value="long_haul_fleet">Long-haul fleet</option>
+        </select>
+      </div>
+      <div id="na-fleet-fields" hidden>
+        <div class="field">
+          <label for="na-org">Organisation name</label>
+          <input type="text" id="na-org" placeholder="e.g. Kilimani Boda Sacco">
+        </div>
+        <div class="field">
+          <label for="na-location">Location</label>
+          <input type="text" id="na-location" placeholder="e.g. Kilimani, Nairobi">
+        </div>
+        <div class="field">
+          <label for="na-contact-name">Contact person name</label>
+          <input type="text" id="na-contact-name" placeholder="e.g. Jane W.">
+        </div>
+        <div class="field">
+          <label for="na-contact-phone">Contact person phone</label>
+          <input type="text" id="na-contact-phone" placeholder="e.g. 0712345678">
+        </div>
+      </div>
+      <button class="btn" id="btn-send-otp">Send verification code</button>
+      <div class="result-msg" id="na-details-result"></div>
+    </div>
+
+    <div class="panel narrow" id="na-step-otp" hidden>
+      <p class="screen-sub">Enter the 6-digit code sent to <strong id="na-otp-phone"></strong>. With SMS_PROVIDER=console (the default), it prints to the server terminal instead.</p>
+      <div class="field">
+        <label for="na-otp-code">Verification code</label>
+        <input type="text" id="na-otp-code" placeholder="e.g. 482913" maxlength="6" inputmode="numeric">
+      </div>
+      <button class="btn" id="btn-verify-otp">Verify & create account</button>
+      <button class="btn btn-secondary" id="btn-otp-back">Back</button>
+      <div class="result-msg" id="na-otp-result"></div>
+    </div>
+
+    <div class="panel narrow" id="na-step-done" hidden>
+      <div class="result-msg ok" id="na-done-result"></div>
+      <button class="btn" id="btn-na-another">Create another account</button>
+    </div>
+  </section>
+
+  <!-- FUEL & EARN -->
+  <section class="screen" id="screen-fuel">
+    <h2 class="screen-title">Fuel & earn</h2>
+    <p class="screen-sub">Record a real fill-up. Points are calculated automatically — individual flat rate, or fleet tiered rate based on trailing 12-month volume.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="fuel-code">Card code or phone number</label>
+        <input type="text" id="fuel-code" placeholder="e.g. CAP-0001 or 0712345678">
+      </div>
+      <div class="field" id="fuel-vehicle-field" hidden>
+        <label for="fuel-vehicle">Vehicle (optional)</label>
+        <select id="fuel-vehicle">
+          <option value="">— not specified —</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fuel-type">Fuel type</label>
+        <select id="fuel-type">
+          <option value="petrol">Petrol</option>
+          <option value="diesel">Diesel</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="fuel-litres">Litres pumped</label>
+        <input type="number" id="fuel-litres" placeholder="e.g. 20" step="0.1">
+      </div>
+      <div class="field">
+        <label for="fuel-amount">Amount paid (KSh)</label>
+        <input type="number" id="fuel-amount" placeholder="e.g. 4360">
+      </div>
+      <p class="screen-sub" style="margin:-8px 0 16px;font-size:12px;">Litres and amount auto-fill each other from the pump price — override either if the pump disagrees.</p>
+      <div class="field">
+        <label for="fuel-station">Station</label>
+        <input type="text" id="fuel-station" placeholder="e.g. Kilimani station">
+      </div>
+      <div class="result-msg" id="fuel-preview"></div>
+      <button class="btn" id="btn-fuel">Record fuel purchase</button>
+      <div class="result-msg" id="fuel-result"></div>
+    </div>
+  </section>
+
+  <!-- REDEEM -->
+  <section class="screen" id="screen-redeem">
+    <h2 class="screen-title">Redeem</h2>
+    <p class="screen-sub">500-point minimum, capped at 30% of the invoice, checked automatically.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="redeem-code">Card code or phone number</label>
+        <input type="text" id="redeem-code" placeholder="e.g. CAP-0001 or 0712345678">
+      </div>
+      <div class="field">
+        <label for="redeem-invoice">Today's invoice (KSh)</label>
+        <input type="number" id="redeem-invoice" placeholder="e.g. 8000">
+      </div>
+      <div class="result-msg" id="redeem-redeemable"></div>
+      <div class="field">
+        <label for="redeem-points">Points to redeem</label>
+        <input type="number" id="redeem-points" placeholder="e.g. 1500" min="0">
+      </div>
+      <div class="result-msg" id="redeem-worth"></div>
+      <button class="btn" id="btn-redeem">Redeem at the pump</button>
+      <div class="result-msg" id="redeem-result"></div>
+    </div>
+  </section>
+
+  <!-- TOP-UP (M-PESA) -->
+  <section class="screen" id="screen-topup">
+    <h2 class="screen-title">Top-up via M-Pesa</h2>
+    <p class="screen-sub">STK push to the customer's phone, credited 1:1 as points. <strong>Not connected to real M-Pesa yet</strong> — built and ready, but needs approved Daraja production credentials and a public callback URL first (see the README). With MPESA_MOCK=true (the default), nothing is sent to Safaricom; use the buttons below to simulate the customer completing or cancelling payment on their phone.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="topup-code">Card code or phone number</label>
+        <input type="text" id="topup-code" placeholder="e.g. CAP-0001 or 0712345678">
+      </div>
+      <div class="field">
+        <label for="topup-phone">M-Pesa phone number to charge</label>
+        <input type="text" id="topup-phone" placeholder="e.g. 0712345678">
+      </div>
+      <div class="field">
+        <label for="topup-amount">Amount (KSh)</label>
+        <input type="number" id="topup-amount" placeholder="e.g. 1000">
+      </div>
+      <button class="btn" id="btn-topup-send">Send STK push</button>
+      <div class="result-msg" id="topup-result"></div>
+    </div>
+
+    <div class="panel narrow" id="topup-pending" hidden>
+      <p class="screen-sub" id="topup-pending-note"></p>
+      <button class="btn" id="btn-topup-simulate-success">Simulate: customer paid</button>
+      <button class="btn btn-secondary" id="btn-topup-simulate-fail">Simulate: customer cancelled</button>
+      <div class="result-msg" id="topup-simulate-result"></div>
+    </div>
+  </section>
+
+  <!-- ANALYTICS -->
+  <section class="screen" id="screen-analytics">
+    <h2 class="screen-title">Analytics</h2>
+    <p class="screen-sub">A first look at what's happening across the whole system.</p>
+    <div id="analytics-body"></div>
+  </section>
+
+  <footer class="demo-foot">HASS NATION system — running locally against a real SQLite database.</footer>
+</div>
+<script src="app.js"></script>
+</body>
+</html>

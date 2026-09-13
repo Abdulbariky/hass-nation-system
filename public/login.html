@@ -1,0 +1,90 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HASS NATION — Staff Login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{ --ink:#1B1F27; --muted:#6B7280; --line:#E5E7EB; --amber:#E8873A; --amber-deep:#C96B22; --bad:#C0392B; }
+  *{box-sizing:border-box;}
+  body{ margin:0; min-height:100vh; background:#FFFFFF; color:var(--ink); font-family:'Inter',-apple-system,sans-serif; display:flex; align-items:center; justify-content:center; padding:24px; }
+  .card{ width:100%; max-width:360px; text-align:center; }
+  h1{ font-family:'Barlow Condensed','Arial Narrow',sans-serif; font-weight:700; font-size:26px; margin:0 0 6px; }
+  p.tag{ color:var(--muted); font-size:14px; margin:0 0 28px; }
+  .field{ text-align:left; margin-bottom:14px; }
+  .field label{ display:block; font-size:12px; color:var(--muted); margin-bottom:6px; }
+  .field input{ width:100%; border:1px solid var(--line); border-radius:10px; padding:11px 13px; font-size:14.5px; font-family:'Inter',sans-serif; }
+  .field input:focus{ outline:none; border-color:var(--amber); }
+  .btn{ width:100%; font-weight:600; font-size:14.5px; background:var(--amber); color:#1a1300; border:none; border-radius:12px; padding:13px 20px; cursor:pointer; margin-top:6px; }
+  .btn:hover{ background:var(--amber-deep); }
+  .btn:disabled{ opacity:.6; cursor:default; }
+  .error{ color:var(--bad); font-size:13px; margin-top:14px; min-height:16px; }
+</style>
+</head>
+<body>
+  <div class="card">
+    <h1>Staff login</h1>
+    <p class="tag">Sign in with your phone or email to use the console.</p>
+    <div class="field">
+      <label for="login-identifier">Phone or email</label>
+      <input type="text" id="login-identifier" placeholder="e.g. 0712345678" autocomplete="username">
+    </div>
+    <div class="field">
+      <label for="login-password">Password</label>
+      <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn" id="btn-login">Log in</button>
+    <div class="error" id="login-error"></div>
+  </div>
+  <script>
+    // If a session is already stored, skip straight past the login screen.
+    if (localStorage.getItem('hn_token')) {
+      location.href = 'console.html';
+    }
+
+    const identifierInput = document.getElementById('login-identifier');
+    const passwordInput = document.getElementById('login-password');
+    const loginButton = document.getElementById('btn-login');
+    const errorBox = document.getElementById('login-error');
+
+    async function attemptLogin() {
+      const identifier = identifierInput.value.trim();
+      const password = passwordInput.value;
+      errorBox.textContent = '';
+      if (!identifier || !password) {
+        errorBox.textContent = 'Enter your phone/email and password';
+        return;
+      }
+
+      loginButton.disabled = true;
+      try {
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ identifier, password }),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          errorBox.textContent = data.error || 'Login failed';
+          return;
+        }
+        localStorage.setItem('hn_token', data.token);
+        localStorage.setItem('hn_staff', JSON.stringify(data.staff));
+        location.href = 'console.html';
+      } catch (err) {
+        errorBox.textContent = 'Could not reach the server';
+      } finally {
+        loginButton.disabled = false;
+      }
+    }
+
+    loginButton.addEventListener('click', attemptLogin);
+    [identifierInput, passwordInput].forEach(el => {
+      el.addEventListener('keydown', e => { if (e.key === 'Enter') attemptLogin(); });
+    });
+  </script>
+</body>
+</html>

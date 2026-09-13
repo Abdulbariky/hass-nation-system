@@ -6,9 +6,13 @@
   "scripts": {
     "start": "node server.js",
     "seed": "node scripts/seed.js",
+    "create-admin": "node scripts/createAdmin.js",
+    "simulate-mpesa-callback": "node scripts/simulateMpesaCallback.js",
+    "simulate-ussd": "node scripts/simulateUssd.js",
     "test": "node scripts/test-scenarios.js"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
     "better-sqlite3": "^11.3.0",
     "cors": "^2.8.5",
     "dotenv": "^16.4.5",

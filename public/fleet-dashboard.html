@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>HASS NATION — Fleet Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@500;600;700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+<script>
+  // No fleet session, no dashboard — bounce to the fleet login page before
+  // this page paints. The API itself (services/fleetAuthService.js) is
+  // what actually enforces this on every request.
+  if (!localStorage.getItem('hn_fleet_token')) {
+    location.href = 'fleet-login.html';
+  }
+</script>
+</head>
+<body>
+<div id="app">
+  <header class="topbar">
+    <div class="brand">
+      <div class="brand-mark"></div>
+      <h1>HASS NATION</h1>
+      <span class="tag">Fleet manager dashboard</span>
+    </div>
+    <div class="staff-bar">
+      <span id="fleet-account-name"></span>
+      <button class="btn-logout" id="btn-fleet-logout">Log out</button>
+    </div>
+  </header>
+
+  <section>
+    <h2 class="screen-title">Overview</h2>
+    <p class="screen-sub">Your account's points balance and current fleet rate, from your trailing 12-month litres.</p>
+    <div class="panel narrow">
+      <div class="stat-row">
+        <div class="stat"><div class="num" id="ov-balance">—</div><div class="lbl">Points balance</div></div>
+        <div class="stat"><div class="num" id="ov-rate">—</div><div class="lbl">Current rate (pts/L)</div></div>
+        <div class="stat"><div class="num" id="ov-litres">—</div><div class="lbl">Trailing 12-month litres</div></div>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2 class="screen-title">Vehicles</h2>
+    <p class="screen-sub">Add or deactivate the vehicles on your account. Click "History" on a vehicle to see its fuel history.</p>
+    <div class="panel narrow">
+      <div class="field">
+        <label for="veh-reg">Registration number</label>
+        <input type="text" id="veh-reg" placeholder="e.g. KDA 123A">
+      </div>
+      <div class="field">
+        <label for="veh-type">Vehicle type</label>
+        <select id="veh-type">
+          <option value="truck">Truck</option>
+          <option value="trailer">Trailer</option>
+          <option value="long_haul_fleet">Long-haul fleet</option>
+          <option value="boda_boda">Boda boda</option>
+          <option value="matatu">Matatu</option>
+          <option value="school_bus">School bus</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="veh-driver-name">Driver name</label>
+        <input type="text" id="veh-driver-name" placeholder="e.g. James O.">
+      </div>
+      <div class="field">
+        <label for="veh-driver-phone">Driver phone</label>
+        <input type="text" id="veh-driver-phone" placeholder="e.g. 0712345678">
+      </div>
+      <button class="btn" id="btn-add-vehicle">Add vehicle</button>
+      <div class="result-msg" id="add-vehicle-result"></div>
+    </div>
+
+    <div id="vehicle-list"></div>
+    <div id="vehicle-history"></div>
+  </section>
+
+  <footer class="demo-foot">HASS NATION fleet dashboard — you can only ever see your own account's data.</footer>
+</div>
+<script src="fleet.js"></script>
+</body>
+</html>

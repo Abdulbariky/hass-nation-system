@@ -16,7 +16,7 @@ router.post('/', async (req, res) => {
     if (!accountId || invoiceAmount == null || pointsRequested == null) {
       return res.status(400).json({ error: 'accountId, invoiceAmount, and pointsRequested are required' });
     }
-    const result = redeem({ accountId, invoiceAmount: Number(invoiceAmount), pointsRequested: Number(pointsRequested) });
+    const result = redeem({ accountId, invoiceAmount: Number(invoiceAmount), pointsRequested: Number(pointsRequested), staffId: req.staff.id });
 
     const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId);
     if (result.status === 'approved') {

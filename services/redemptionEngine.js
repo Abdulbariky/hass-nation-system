@@ -13,7 +13,7 @@ const MIN_REDEMPTION_POINTS = 500;
 const MAX_REDEMPTION_FRACTION_OF_INVOICE = 0.30;
 const POINTS_TO_KSH = 1; // same 1:1 rule as earning
 
-function redeem({ accountId, invoiceAmount, pointsRequested }) {
+function redeem({ accountId, invoiceAmount, pointsRequested, staffId }) {
   const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId);
   if (!account) throw new AppError(404, 'Account not found');
   if (invoiceAmount <= 0) throw new AppError(400, 'Invoice amount must be greater than zero');
@@ -40,8 +40,8 @@ function redeem({ accountId, invoiceAmount, pointsRequested }) {
   const newInvoiceTotal = status === 'approved' ? invoiceAmount - discountKsh : invoiceAmount;
 
   const insertRedemption = db.prepare(`
-    INSERT INTO redemptions (account_id, invoice_amount, points_requested, status, rejection_reason, new_invoice_total)
-    VALUES (@accountId, @invoiceAmount, @pointsRequested, @status, @rejectionReason, @newInvoiceTotal)
+    INSERT INTO redemptions (account_id, invoice_amount, points_requested, status, rejection_reason, new_invoice_total, staff_id)
+    VALUES (@accountId, @invoiceAmount, @pointsRequested, @status, @rejectionReason, @newInvoiceTotal, @staffId)
   `);
   const insertLedger = db.prepare(`
     INSERT INTO points_ledger (account_id, delta, reason, reference_id)
@@ -49,7 +49,7 @@ function redeem({ accountId, invoiceAmount, pointsRequested }) {
   `);
 
   const run = db.transaction(() => {
-    const redemptionResult = insertRedemption.run({ accountId, invoiceAmount, pointsRequested, status, rejectionReason, newInvoiceTotal });
+    const redemptionResult = insertRedemption.run({ accountId, invoiceAmount, pointsRequested, status, rejectionReason, newInvoiceTotal, staffId: staffId || null });
     if (status === 'approved') {
       // Negative delta — this is the ONLY thing redemption touches.
       // It never writes to fuel_transactions, so a fleet's rolling-12-month
@@ -70,4 +70,32 @@ function redeem({ accountId, invoiceAmount, pointsRequested }) {
   };
 }
 
-module.exports = { redeem, MIN_REDEMPTION_POINTS, MAX_REDEMPTION_FRACTION_OF_INVOICE };
+/**
+ * Read-only preview of what CAN be redeemed right now for a given
+ * invoice — the exact same MIN_REDEMPTION_POINTS / 30%-cap rules redeem()
+ * enforces above, just without writing anything. Lets the Redeem screen
+ * show the ceiling before the customer types a number, instead of after
+ * they get rejected.
+ */
+function getRedeemable({ accountId, invoiceAmount }) {
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId);
+  if (!account) throw new AppError(404, 'Account not found');
+  if (invoiceAmount <= 0) throw new AppError(400, 'Invoice amount must be greater than zero');
+
+  const balance = getBalance(accountId);
+  const cap = invoiceAmount * MAX_REDEMPTION_FRACTION_OF_INVOICE;
+  const rawMax = Math.min(balance, cap);
+
+  let maxRedeemable = rawMax;
+  let reason = null;
+  if (rawMax < MIN_REDEMPTION_POINTS) {
+    maxRedeemable = 0;
+    reason = balance < MIN_REDEMPTION_POINTS
+      ? `Balance (${Math.floor(balance)} points) is below the ${MIN_REDEMPTION_POINTS}-point minimum redemption`
+      : `30% of this invoice (${Math.floor(cap)} points) is below the ${MIN_REDEMPTION_POINTS}-point minimum redemption`;
+  }
+
+  return { balance, cap, minRedemption: MIN_REDEMPTION_POINTS, maxRedeemable, reason };
+}
+
+module.exports = { redeem, getRedeemable, MIN_REDEMPTION_POINTS, MAX_REDEMPTION_FRACTION_OF_INVOICE };

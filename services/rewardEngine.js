@@ -51,38 +51,71 @@ function fleetTierForLitres(litresSoFar) {
 }
 
 /**
+ * The rate (and, for fleets, the tier label) currently active for an
+ * account — individual flat rate, or fleet tier from litres bought BEFORE
+ * this purchase. Factored out of recordFuelPurchase so a read-only "what
+ * would this earn?" preview can reuse the exact same decision instead of
+ * a second copy of it living in the frontend.
+ *
+ * Fleet note: the rate for an ENTIRE fill-up is based on litres bought
+ * BEFORE it started — not a per-litre split within the transaction. So a
+ * fill-up that pushes a fleet from 25,000L to 35,000L still earns the OLD
+ * (lower) rate in full; the new rate only applies starting with their
+ * NEXT purchase. This is deliberately simple to explain and audit: "your
+ * rate today is based on your last 12 months, full stop" — no
+ * mid-transaction maths anyone has to double-check at the pump.
+ */
+function rateForAccount(account, accountId) {
+  if (account.type === 'individual') {
+    return { ratePerLitre: INDIVIDUAL_RATE, tierLabel: null };
+  }
+  const litresSoFar = trailingTwelveMonthLitres(accountId);
+  const tier = fleetTierForLitres(litresSoFar);
+  return { ratePerLitre: tier.rate, tierLabel: `${tier.min.toLocaleString()}+` };
+}
+
+/**
+ * Read-only preview of what a fill-up WOULD earn right now, for a "this
+ * will earn X points at Y points/litre" UI — no writes, so it's always
+ * safe to call as the attendant is still typing.
+ */
+function previewEarn({ accountId, litres }) {
+  const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId);
+  if (!account) throw new AppError(404, 'Account not found');
+  const litresNum = Number(litres);
+  if (!(litresNum > 0)) throw new AppError(400, 'Litres must be greater than zero');
+
+  const { ratePerLitre, tierLabel } = rateForAccount(account, accountId);
+  return { ratePerLitre, tierLabel, pointsEarned: litresNum * ratePerLitre * POINTS_PER_KSH };
+}
+
+/**
  * Records a fuel purchase and credits points according to the rules above.
  * This is the ONE function that should ever be called to earn points —
  * never write to fuel_transactions or points_ledger directly from a route.
  */
-function recordFuelPurchase({ accountId, litres, fuelType, station, amountKsh }) {
+function recordFuelPurchase({ accountId, litres, fuelType, station, amountKsh, staffId, vehicleId }) {
   const account = db.prepare('SELECT * FROM accounts WHERE id = ?').get(accountId);
   if (!account) throw new AppError(404, 'Account not found');
   if (litres <= 0) throw new AppError(400, 'Litres must be greater than zero');
 
-  let ratePerLitre, tierLabel = null;
-
-  if (account.type === 'individual') {
-    ratePerLitre = INDIVIDUAL_RATE;
-  } else {
-    // Fleet: the rate for THIS ENTIRE fill-up is based on litres bought
-    // BEFORE it started — not a per-litre split within the transaction.
-    // So a fill-up that pushes a fleet from 25,000L to 35,000L still earns
-    // the OLD (lower) rate in full; the new rate only applies starting with
-    // their NEXT purchase. This is deliberately simple to explain and audit:
-    // "your rate today is based on your last 12 months, full stop" — no
-    // mid-transaction maths anyone has to double-check at the pump.
-    const litresSoFar = trailingTwelveMonthLitres(accountId);
-    const tier = fleetTierForLitres(litresSoFar);
-    ratePerLitre = tier.rate;
-    tierLabel = `${tier.min.toLocaleString()}+`;
+  // Vehicle is optional, but if one is given it must actually belong to
+  // this account — otherwise a fleet's per-vehicle history could show
+  // fuel that was never bought for that vehicle.
+  if (vehicleId) {
+    const vehicle = db.prepare('SELECT * FROM vehicles WHERE id = ?').get(vehicleId);
+    if (!vehicle || vehicle.account_id !== Number(accountId)) {
+      throw new AppError(400, 'Vehicle does not belong to this account');
+    }
   }
+
+  const { ratePerLitre, tierLabel } = rateForAccount(account, accountId);
 
   const pointsEarned = litres * ratePerLitre * POINTS_PER_KSH;
 
   const insertFuel = db.prepare(`
-    INSERT INTO fuel_transactions (account_id, litres, fuel_type, station, amount_ksh, rate_per_litre, points_earned, tier_at_time)
-    VALUES (@accountId, @litres, @fuelType, @station, @amountKsh, @ratePerLitre, @pointsEarned, @tierLabel)
+    INSERT INTO fuel_transactions (account_id, litres, fuel_type, station, amount_ksh, rate_per_litre, points_earned, tier_at_time, staff_id, vehicle_id)
+    VALUES (@accountId, @litres, @fuelType, @station, @amountKsh, @ratePerLitre, @pointsEarned, @tierLabel, @staffId, @vehicleId)
   `);
 
   const insertLedger = db.prepare(`
@@ -93,7 +126,7 @@ function recordFuelPurchase({ accountId, litres, fuelType, station, amountKsh })
   // Wrap both writes in one transaction — a purchase should never exist
   // without its matching ledger entry, or vice versa.
   const runBoth = db.transaction(() => {
-    const fuelResult = insertFuel.run({ accountId, litres, fuelType, station: station || null, amountKsh, ratePerLitre, pointsEarned, tierLabel });
+    const fuelResult = insertFuel.run({ accountId, litres, fuelType, station: station || null, amountKsh, ratePerLitre, pointsEarned, tierLabel, staffId: staffId || null, vehicleId: vehicleId || null });
     insertLedger.run({ accountId, delta: pointsEarned, referenceId: fuelResult.lastInsertRowid });
     return fuelResult.lastInsertRowid;
   });
@@ -129,6 +162,7 @@ class AppError extends Error {
 
 module.exports = {
   recordFuelPurchase,
+  previewEarn,
   getBalance,
   trailingTwelveMonthLitres,
   fleetTierForLitres,
